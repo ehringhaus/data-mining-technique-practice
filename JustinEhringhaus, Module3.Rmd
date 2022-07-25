@@ -1,0 +1,69 @@
+---
+title: "Module 3 Technique Practice"
+author: "Justin Ehringhaus"
+date: "____, 2022"
+output:
+  github_document: default
+bibliography: "references.bib"
+nocite: '@*'
+---
+
+```{r setup, include=FALSE}
+# repo: https://github.com/ehringhaus/data-mining-technique-practice.git 
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# OPTION 1: Decision Tree
+
+```{r}
+#data splicing
+set.seed(12345)
+train <- sample(1:nrow(mushrooms), size = ceiling(0.80 * nrow(mushrooms)), replace = FALSE)
+# training set
+mushrooms_train <- mushrooms[train,]
+# test set
+mushrooms_test <- mushrooms[-train,]
+# penalty matrix
+penalty.matrix <- matrix(c(0, 1, 10, 0), byrow = TRUE, nrow = 2)
+# building the classification tree with rpart
+tree <- rpart(formula = class ~ .,
+              data = mushrooms_train,
+              parms = list(loss = penalty.matrix),
+              method = "class")
+# Details of the decision tree
+summary(tree)
+# Visualize the decision tree with rpart.plot
+rpart.plot(tree, nn = TRUE)
+# choosing the best complexity parameter "cp" to prune the tree
+cp.optim <- tree$cptable[which.min(tree$cptable[,"xerror"]), "CP"]
+# tree prunning using the best complexity parameter
+tree <- prune(tree, cp = cp.optim)
+# Details of the pruned decision tree
+summary(tree)
+#Testing the model
+pred <- predict(object = tree, mushrooms_test[-1], type = "class")
+#Calculating accuracy
+t <- table(mushrooms_test$class, pred)
+confusionMatrix(t)
+ctable <- as.table(confusionMatrix(t))
+fourfoldplot(ctable, 
+             color = c("brown1", "chartreuse1"), 
+             conf.level = 0, 
+             margin = 1, 
+             main = "Confusion Matrix")
+```
+
+# OPTION 2: Classification
+
+```{r}
+
+```
+
+
+# OPTION 3: Clustering
+
+```{r}
+# Common Algorithms: Hierarchical / K-Means
+```
+
+
