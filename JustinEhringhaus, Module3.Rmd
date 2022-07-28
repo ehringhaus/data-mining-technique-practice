@@ -8,6 +8,16 @@ bibliography: "references.bib"
 nocite: '@*'
 ---
 
+- Decision Tree
+- Random Forest
+- K-Means clustering
+- Association Rule (apriori algorithm)
+- GAM (refer to "Case study on grain yields" from datacamp)
+
+Can make conclusions whether it worked or didn't work. Can use LDA below and describe WHY it didn't work. Results don't matter as much as trying / explaining.
+
+Group members should use different approaches, but same dataset.
+
 ```{r setup, include=FALSE}
 # repo: https://github.com/ehringhaus/data-mining-technique-practice.git 
 knitr::opts_chunk$set(echo = TRUE)
@@ -17,7 +27,6 @@ knitr::opts_chunk$set(echo = TRUE)
 library(pacman)
 p_load(tidyverse)  # usual suite of packages
 ```
-
 
 # Data
 
