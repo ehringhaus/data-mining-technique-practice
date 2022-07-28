@@ -11,12 +11,15 @@ nocite: '@*'
 - Decision Tree
 - Random Forest
 - K-Means clustering
+- Hierarchical clustering
 - Association Rule (apriori algorithm)
 - GAM (refer to "Case study on grain yields" from datacamp)
 
 Can make conclusions whether it worked or didn't work. Can use LDA below and describe WHY it didn't work. Results don't matter as much as trying / explaining.
 
 Group members should use different approaches, but same dataset.
+
+Could use K-means clustering to 1) find homogeneous subgroups within larger group and 2) find patterns in the features of the data (i.e., dimensionality reduction) OR 3) pre-processing before supervised learning.
 
 ```{r setup, include=FALSE}
 # repo: https://github.com/ehringhaus/data-mining-technique-practice.git 
