@@ -1,25 +1,12 @@
 ---
 title: "Module 3 Technique Practice"
 author: "Justin Ehringhaus"
-date: "____, 2022"
+date: "July 31, 2022"
 output:
   github_document: default
-bibliography: "references.bib"
+bibliography: "JustinEhringhaus, references.bib"
 nocite: '@*'
 ---
-
-- Decision Tree
-- Random Forest
-- K-Means clustering
-- Hierarchical clustering
-- Association Rule (apriori algorithm)
-- GAM (refer to "Case study on grain yields" from datacamp)
-
-Can make conclusions whether it worked or didn't work. Can use LDA below and describe WHY it didn't work. Results don't matter as much as trying / explaining.
-
-Group members should use different approaches, but same dataset.
-
-Could use K-means clustering to 1) find homogeneous subgroups within larger group and 2) find patterns in the features of the data (i.e., dimensionality reduction) OR 3) pre-processing before supervised learning.
 
 ```{r setup, include=FALSE}
 # repo: https://github.com/ehringhaus/data-mining-technique-practice.git 
@@ -31,11 +18,24 @@ library(pacman)
 p_load(tidyverse)  # usual suite of packages
 ```
 
-# Data
+### Introduction
 
-```{r}
+For this assignment, I will be applying two types of clustering (i.e., K-means and Hierarchical) and one type of dimensionality reduction (i.e., principal component analysis, or PCA) to our group's subset of the World Values Survey dataset. Clustering is an example of unsupervised learning, and these techniques can be used 1) to find homogeneous subgroups within a larger group, 2) to discover patterns in the features of the data (dimensionality reduction), and/or 3) as pre-processing step before applying supervised learning techniques.  
+
+As a general outline of what is to follow, we will:  
+- Prepare the data (feature selection, sampling)  
+- Explore the data (descriptive statistics on # obervations, # features)  
+- Perform PCA and interpret results  
+- Perform two types of clustering and interpret results  
+- Combine PCA and clustering  
+- Compare and contrast results  
+
+### Import, Preparation, and Exploration of the Data
+
+```{r message=FALSE, warning=FALSE}
 wvs <- read_csv("/Users/justin/Desktop/ALY 6040/Project/Repo/WVS_Cross-National_Wave_7_csv_v4_0.csv")
 
+# subset of all features our group included in the previous assignment
 wvs_subset <- 
   wvs %>% 
   select(
@@ -95,127 +95,225 @@ wvs_subset <-
     imm.increases.unemployment = Q128,
     imm.brings.social.conflict = Q129,
     imm.policy.preference = Q130
-    )
+    ) %>% 
+  # ONLY keeping rows with complete information (no missing values)
+  drop_na()
+
+# num. observations
+nrow(wvs_subset)
+
+# num. features
+ncol(wvs_subset)
 ```
 
-
-# OPTION 1: Decision Tree
+In our last assignment, we opted NOT to cleanse missing values from our dataset, and we supplied justifications for this decision. However, in this assignment it will be necessary to supply a distance matrix to clustering algorithms, and such algorithms are not fond of missing values. Given this, I am opting to include ONLY rows with complete observations by using the `drop_na` function. The shape of the dataset is drastically affected, decreasing from `r nrow(wvs)` observations to `r nrow(wvs_subset)` observations. The number of features will remain the same: `r ncol(wvs_subset)` features. Although removing so many observations greatly biases our dataset and is no longer as representative of world values, this is the simplest approach for the sake of practicing and understanding the algorithms under consideration. With further time, I would recommend reducing the number of features being examined and selectively imputing values for those features containing missing values.
 
 ```{r}
-# packages needed
-p_load(rpart)
-p_load(caret)
-p_load(rpart.plot)
-p_load(rattle)
-#data splicing
-set.seed(12345)
-train <- sample(1:nrow(mushrooms), size = ceiling(0.80 * nrow(mushrooms)), replace = FALSE)
-# training set
-mushrooms_train <- mushrooms[train,]
-# test set
-mushrooms_test <- mushrooms[-train,]
-# penalty matrix
-penalty.matrix <- matrix(c(0, 1, 10, 0), byrow = TRUE, nrow = 2)
-# building the classification tree with rpart
-tree <- rpart(formula = class ~ .,
-              data = mushrooms_train,
-              parms = list(loss = penalty.matrix),
-              method = "class")
-# Details of the decision tree
-summary(tree)
-# Visualize the decision tree with rpart.plot
-rpart.plot(tree, nn = TRUE)
-# choosing the best complexity parameter "cp" to prune the tree
-cp.optim <- tree$cptable[which.min(tree$cptable[,"xerror"]), "CP"]
-# tree prunning using the best complexity parameter
-tree <- prune(tree, cp = cp.optim)
-# Details of the pruned decision tree
-summary(tree)
-#Testing the model
-pred <- predict(object = tree, mushrooms_test[-1], type = "class")
-#Calculating accuracy
-t <- table(mushrooms_test$class, pred)
-confusionMatrix(t)
-ctable <- as.table(confusionMatrix(t))
-fourfoldplot(ctable, 
-             color = c("brown1", "chartreuse1"), 
-             conf.level = 0, 
-             margin = 1, 
-             main = "Confusion Matrix")
+# dropping features coded as strings / those that are ordinal rather than nominal
+model.data <- 
+  wvs_subset %>% 
+  select(
+    -Country,
+    -Longitude,
+    -Latitude,
+    -Country.and.year,
+    -Ethnic.Group
+  )
+
+# computational limitations when running models on original dataset
+# random sampling to make smaller subset of the data
+set.seed(444)
+model.data.small <-
+  model.data %>%
+  sample_n(size = 5000)
+
+# no longer needed, cleaning up space
+rm(wvs, wvs_subset, model.data)
 ```
 
-# OPTION 2: Classification
+Prior to continuing, it will be necessary to remove unfavorable features of our subset as well as to decrease its overall size. Country names, for instance, are coded as strings, and these cannot be clustered mathematically unless we were to first convert the strings to numerical data through a process such as vectorization. Instead, we will drop this feature as well as any others that are not as important to our analysis or those coded as strings.
+
+Secondly, I discovered that certain functions such as `dist` (distance matrix) overwhelmed my computer's processing capabilities when feeding in the dataset. Due to this, I have opted to reduce the size of the dataset through randomly sampling 5,000 obsersations. Keeping prior versions of the dataset saved in memory also consumed space, and so I have taken advantage of the very useful `rm` function to clear variables no longer needed.
+
+---
+
+### Performing PCA
 
 ```{r}
+# Check column means to see if scaling is required
+colMeans(model.data.small, na.rm = TRUE)
 
+# Check standard deviations to see if scaling is required
+apply(model.data.small, 2, sd, na.rm = TRUE)
 ```
 
-
-# OPTION 3: Clustering
+As a final step prior to performing PCA, I will check the mean values and standard deviations of each column. This is useful for understanding whether or not the values of features in our dataset are on the same, or different, scales. Having previously explored the dataset, I know already the features are on different scales, and thus scaling will be necessary, but the above functions demonstrate a simple way of assessing the uniformity of features in a dataset.
 
 ```{r}
-# Common Algorithms: Hierarchical / K-Means
+wvs.pr <- prcomp(
+  ~ .,
+  data = model.data.small,
+  scale. = TRUE
+  )
+
+# summary(wvs.pr) shows that 25 principal components required to explain 80% of the variance of the data
+summary(wvs.pr)
 ```
 
-# OPTION 4: Association Mining
+We can feed our dataset into the `prcomp` function, including all variables and setting `scale. = TRUE` as the features are on different scales, as demonstrated above. The summary reveals the proportion of variance each principle component explains, as well as a cumulative total. Depending on the particular problem at hand, at a later stage we may choose to prune the model to include principle components only up to a certain point. For example, if we want to reduce dimensionality but also retain information, PCA informs us it takes at least 25 principle components to explain at least 80% of the variance in the data, and thus pruning and visualizing a model is a balancing act of determining dimensionality and information retention. Ideally, few dimensions will explain the majority of variance in the data, but as exemplified above this is not always the case.
 
 ```{r}
-
+biplot(wvs.pr)
 ```
 
-# OPTION 5: Linear Discriminant Analysis (LDA)
+The above biplot demonstrates how a non-trivial number of observations and features can make it difficult to determine the relationships of features to one another. The first two principle components explain only 20% of the variance, and it is only possible to make several interpretations given the density of component scores and loadings such as "beating.wifi" and "terrorism" features sharing the same directionality, which signifies a strong relationship between the two features. As such, future attempts at PCA would benefit by reducing the number of features included in the analysis in order to discern more accurately the relationships between each.
 
 ```{r}
-# source: https://www.r-bloggers.com/2021/05/linear-discriminant-analysis-in-r/
-p_load(klaR)
-p_load(psych)
-p_load(MASS)
-p_load(BiocManager)
-p_load(ggord)
-p_load(devtools)
+# 1 x 2 grid
+par(mfrow = c(1, 2))
 
-wvs_lda <- wvs_subset[c("Happiness", 
-                        "Income.Group", 
-                        "Marital.Status",
-                        "Number.Children",
-                        "Country",
-                        "Town.size")]
+# variability of each feature
+pr.var <- wvs.pr$sdev ^ 2
 
-# create a scatterplot for the first four numerical variables.
-pairs.panels(wvs_lda[2:6],
-             gap = 0,
-             bg = c("red", "green", "blue", "orange")[wvs_subset$Happiness],
-             pch = 21)
-# create a training dataset and test dataset for prediction and testing purposes. 
-set.seed(123)
-ind <- sample(2, nrow(wvs_lda),
-              replace = TRUE,
-              prob = c(0.6, 0.4))
-training <- wvs_subset[c(15, 27:31)][ind==1,]
-testing <- wvs_subset[c(15, 27:31)][ind==2,]
-# Linear discriminant analysis
-linear <- lda(Happiness~., training)
-linear
-# Stacked histogram for discriminant function values. These histograms are based on ld1. It’s clearly evident that no overlaps between first and second and first and third species. But some overlap observed between the second and third species.
-p <- predict(linear, training)
-ldahist(data = p$x[,1], g = training$Happiness)
-# histogram based on lda2 showing complete overlap and its not good.
-ldahist(data = p$x[,2], g = training$Happiness)
-# Biplot based on LD1  and LD2. Setosa separated very clearly and some overlap observed between Versicolor and virginica. Based on arrows, Sepal width and sepal length explained more for setosa, petal width and petal length explained more for versicolor and virginica.
-ggord(linear, training$Happiness, ylim = c(-10, 10))
-# Partition plot. It provides the classification of each and every combination in the training dataset.
-partimat(Happiness~., data = training, method = "lda")
-partimat(Happiness~., data = training, method = "qda")
-# Confusion matrix and accuracy – training data
-p1 <- predict(linear, training)$class
-tab <- table(Predicted = p1, Actual = training$Happiness)
-tab
-# In the training dataset total correct classification is 33+26+25=84. The accuracy of the model is around 0.9767442
-sum(diag(tab))/sum(tab)
-# Confusion matrix and accuracy – testing data. The accuracy of the model is around .984375
-p2 <- predict(linear, testing)$class
-tab1 <- table(Predicted = p2, Actual = testing$Happiness)
-tab1
-sum(diag(tab1))/sum(tab1)
+# Variance explained by each principal component
+pve <- pr.var / sum(pr.var)
+
+# variance explained for each principal component
+plot(pve, xlab = "Principal Component", 
+     ylab = "Proportion of Variance Explained", 
+     ylim = c(0, 1), type = "b")
+
+# cumulative proportion of variance explained
+plot(cumsum(pve), xlab = "Principal Component", 
+     ylab = "Cumulative Proportion of Variance Explained", 
+     ylim = c(0, 1), type = "b")
 ```
 
+As previously discussed, PCA provides information as to the relative importance of each feature. The above plots visualize the variance explained by each principle component, individually (left) and cumulatively (right). The above code is written in base R, but a more succinct version with more easily interpretable results is included below, which is generated using the factoextra package.
+
+```{r}
+p_load(factoextra)
+
+# another method for finding optimal number of clusters with elbow method
+fviz_nbclust(model.data.small, kmeans, method = "wss")
+```
+
+I will refer to these charts at a later step when using the "elbow method" for determining the optimal number of clusters to include in clustering models when pruning them.
+
+### Hierarchical Clustering
+
+```{r}
+# scaling
+data.scaled <- scale(model.data.small)
+
+# calculating Euclidean distances
+data.dist <- dist(data.scaled, method = "euclidian")
+
+# no longer needed
+rm(data.scaled)
+```
+
+Prior to feeding the dataset into a hierarchical clustering model, it is necessary both to scale it and to calculate a distance matrix using the scaled version.
+
+```{r}
+# creating hierarchical clustering model
+wvs.hclust <- hclust(data.dist, method = "complete")
+```
+
+The above code builds a hierarchical clustering model, where `method = "complete"` generally tends to produce the most balanced results. `method = "single"` can produce unbalanced trees, however this may sometimes be preferred if your intent is to explore outlier clusters. A balanced tree, on the other hand, is optimal for producing clusters approximately equal in size.
+
+```{r}
+# dendogram
+plot(wvs.hclust)
+abline(h = 17, col = "red")
+```
+
+The dendogram above reveals helpful information for pruning or cutting the tree. For example, you can choose to cut a tree at a certain height (h) or with a certain number of groups (k). The "elbow method" mentioned above entails choosing the optimal number of clusters, and it appears the elbow occurs at either two or three. In the dendogram, including a red horizontal line at the height of 17 shows the tree would be cut into three clusters at this height. We know from our PCA above that three clusters or principle components explain 25.7% of the variance in the data. This is not much, so we will lose information, but on the other hand we can more easily visualize the results of clustering.
+
+```{r}
+wvs.hclust.clusters <- cutree(wvs.hclust, k = 3)
+```
+
+The above code uses `k = 3` to define the number of clusters we would like to include in our hierarchical clustering model. The other option would be to declare `h = 17` to choose the height at which to cut the tree where three clusters remain.
+
+```{r}
+# observing cluster membership
+table(wvs.hclust.clusters)
+```
+
+The contingency table of the hierarchical clustering model shows the clusters are not balanced, with the majority contained within the second cluster and a minority in the third cluster.
+
+---
+
+### K-means Clustering
+
+```{r}
+# creating a k-means model
+wvs.km <- kmeans(
+  scale(model.data.small),
+  centers = 3,
+  nstart = 20
+)
+```
+
+Unlike hierarchical clustering, k-means clustering requires knowing at the outset the number of clusters to create. As we have already conducted a principle component analysis and hierarchical clustering, we will similarly refer to the "elbow method" and choose three clusters for modeling purposes. 
+
+There is a random component to k-means clustering, where the algorithm initially chooses at random *k* observations of each future to include for calculation of its initial center. Because of the random component, `nstart` defines the number of times to re-run the k-means algorithm for the purpose of selecting the best model out of all of them.
+
+```{r}
+# observing cluster membership
+table(wvs.km$cluster)
+```
+
+Unlike the hierarchical clustering model, the k-means model produced more balanced clusters. Similarly, the second cluster contains the majority.
+
+```{r}
+fviz_cluster(wvs.km, data = model.data.small)
+```
+
+Visualizing the clusters from the above k-means model reveals there is some overlap in each, but the model generally does a good job at partitioning the clusters.
+
+---
+
+### Combining PCA and clustering
+
+```{r}
+# PC1:PC5 explain over 35% variance in the data
+wvs.pr.hclust <- hclust(dist(wvs.pr$x[, 1:5]), method = "complete")
+
+# cutting model into 3 clusters
+wvs.pr.hclust.clusters <- cutree(wvs.pr.hclust, k = 3)
+```
+
+Having performed PCA, we can combine our knowledge of principle components with hierarchical clustering to produce a new model including only certain principle components explaining a certain amount of variance in the data. For example, we know that five principle components explain 35% of the variance in the data, so we can create a new hierarchical clustering model containing only these, and then prune the resulting tree into three clusters as before. 
+
+---
+
+### Comparisons
+
+```{r}
+table(wvs.hclust.clusters, wvs.pr.hclust.clusters)
+```
+
+Comparing the previous hierarchical clustering model to the pruned hierarchical clustering model, we can see using the above contingency table that cluster 2 contains the most overlap, and the previous model's second cluster is most equivalent to the pruned model's first cluster.
+
+```{r}
+# comparing k-means to hierarchical clustering
+table(wvs.km.clusters = wvs.km$cluster, wvs.hclust.clusters)
+```
+
+Comparing the k-means clustering model to the original hierarchical clustering model, it looks like the second cluster from each are the most equivalent, whereas the third cluster is most dissimilar.
+
+---
+
+### Conclusions
+
+The one type of dimensionality reduction (PCA) and the two types of clustering (k-means and hierarchical) employed in this assignment represent just a first step in exploring the relationships between features in a dataset as well as how those features can be partitioned. As clustering is an example of unsupervised learning, we are still left with the task of interpreting what those clusters mean.
+
+For instance, although I had used the "elbow method" to choose three clusters as the optimal number, clustering alone did not provide me with any information as to what those clusters represent. The next step in the data mining pipeline might be to explore the clusters more thoroughly to understand how to label them. Having done so, we would walk away with a deeper understanding of how the dataset is grouped.
+
+Another option would be to label the clusters in order to conduct supervised learning and make predictions using train and test sets. Then, new data fed into a supervised learning model could be predicted to belong to a certain cluster.
+
+---
+
+### Works Cited:
